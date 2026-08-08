@@ -80,6 +80,39 @@ because it has neither install, so a local run against both is the real gate.
 - `InstrumentRouter` has a per-instrument state machine because the game retriggers each
   family differently. The one-frame gap for sax/trombone is required, not an oversight.
 
+## Publishing to the Workshop
+
+Build the clean folder first — never publish the dev junction, which would upload
+`.git/`, `tools/` and `docs/` along with everything else:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\package.ps1 -InstallToMods
+```
+
+Launch the game, then — **with it still open, immediately before pressing UPLOAD** — clear
+the compiled artifacts:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\pre-upload-clean.ps1
+```
+
+Don't relaunch or bounce through the main menu afterwards; the game recompiles on load and
+the artifacts come straight back.
+
+This matters more than it looks. Duck Game's uploader *tries* to strip
+`_compiled.dll`/`_compiled.hash`, but the paths it builds are wrong — it copies to
+`folderPath + "/" + name` and then deletes from `folderPath + name`, with no separator —
+so nothing is ever stripped. The Rebuilt variants were never on that list to begin with.
+
+If a stale pair ships, `ModLoader.AttemptCompile` sees a `_compiled.hash` whose CRC32
+matches the (identical) `.cs` files, skips recompilation entirely, and loads the shipped
+DLL. That DLL was built against *your* game — so a subscriber on the other graphics stack
+(vanilla is XNA, Rebuilt is FNA) loads an assembly linked against assemblies they do not
+have. Shipping source exists precisely to avoid that, and a leaked DLL silently undoes it.
+
+Publish **private** first, subscribe from a clean profile, confirm it compiles on the
+subscriber side, and only then make it public.
+
 ## Style
 
 Match what is there: explicit types over `var` where the type is not obvious, comments that
