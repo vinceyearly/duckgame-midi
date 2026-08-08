@@ -50,6 +50,10 @@ jobs:
             exit 1
           }
           Write-Host "OK - no syntax or language-version errors"
+          # csc always exits non-zero here (it cannot resolve DuckGame types without
+          # the game's assemblies), and pwsh would propagate that as a step failure.
+          # The filtered error list above is the real verdict.
+          exit 0
 
   hygiene:
     name: Mod packaging hygiene
