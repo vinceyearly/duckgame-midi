@@ -3,7 +3,10 @@
 Play Duck Game's instruments with a real MIDI keyboard, beat machine, or pad controller.
 
 Drum kit, keytar, saxophone, trombone, trumpet — plus pitched quacks. Plug in, pick up an
-instrument, play. **Other players hear your performance even if they don't have the mod.**
+instrument, play. **Other players hear your performance even if they don't have the mod,
+and you can still join public lobbies.**
+
+![The MIDI Controller settings menu, showing an auto-detected Akai MPKmini2](docs/screenshots/01-settings-menu.png)
 
 ---
 
@@ -37,8 +40,8 @@ the stock Steam build and Duck Game Rebuilt with no separate download.
 
 ## Using it
 
-Plug your controller in **before** launching, and it connects on its own. If you plug in
-later, it's picked up within a couple of seconds.
+Plug your controller in **before** launching, and it connects on its own — no setup step.
+If you plug in later, it's picked up within a couple of seconds.
 
 1. Start any match.
 2. Open the console with `` ` `` and type `midi spawn drums` (or `sax`, `keytar`,
@@ -46,6 +49,20 @@ later, it's picked up within a couple of seconds.
 3. Grab the instrument and play.
 
 Press **F9** for settings, or type `midi settings`.
+
+First time in, the setup wizard walks you through it and tracks where you've got to:
+
+![The setup wizard, showing "STEP 2: SPAWN AND HOLD AN INSTRUMENT"](docs/screenshots/07-setup-wizard.png)
+
+Devices are picked automatically, but you can choose one if you have several. The
+connected input is marked, and the list refreshes as hardware comes and goes:
+
+![The MIDI device picker listing MPKmini2 as connected](docs/screenshots/02-device-picker.png)
+
+While you play, a small HUD in the corner shows the held instrument and the last note, so
+you can tell at a glance that it's working. It fades out when you stop:
+
+![The in-play HUD reading "MIDI NONE A#3 v100"](docs/screenshots/08-hud-live-note.png)
 
 No controller handy? `midi test scale`, `midi test drums` and `midi test quack` play
 synthetic notes through the whole pipeline — useful for checking the mod works before
@@ -74,8 +91,13 @@ steps. Notes outside that range fold back into it unless you turn *Fold Octaves*
 **Quack** listens on its own MIDI channel — channel 2 by default — so you can quack a
 bassline underneath a saxophone solo. It's also what plays if you're holding nothing.
 
-Everything is remappable: **Settings → Drum Mapping / Note Mapping**, select a row, hit a
-pad or key.
+Everything is remappable: **Settings → Drum Mapping / Note Mapping**, select a row, then
+hit the pad or key you want on it. Rows left alone stay on the automatic routing, shown as
+`auto`:
+
+![Drum mapping, listing all eight kit voices set to auto (GM)](docs/screenshots/03-drum-mapping.png)
+
+![Note mapping, listing 13 scale steps from auto C4 up to auto C5](docs/screenshots/04-note-mapping.png)
 
 ## Settings
 
@@ -91,6 +113,8 @@ pad or key.
 | Slur nearby notes | Glide between adjacent notes instead of re-articulating |
 | Show HUD | The small status readout during play |
 | Player slot | Which local player to drive in splitscreen |
+
+![The Play Options page with root note, priority, quack channel and other settings](docs/screenshots/05-play-options.png)
 
 ## Console commands
 
@@ -138,11 +162,9 @@ from an unmodded one. That's legitimate here because the mod is genuinely conten
   exactly this category of client-side mod. That list lives in the game binary and can't
   be added to from outside, so dropping out of the accessible-mod list is the equivalent.
 
-Check it any time with `midi status`:
+Check it any time with `midi status` — `"nomods"` means lobbies see an unmodded client:
 
-```
-[MIDI]   lobbies:    public lobbies OK (mod hash "nomods")
-```
+![Console output of midi status showing lobbies: public lobbies OK (mod hash "nomods")](docs/screenshots/09-console-status.png)
 
 **The honest trade-off:** because the mod is excluded from the hash, it also doesn't
 appear in a lobby's mod list, so a host enforcing a strict "no mods" policy can't see it.
@@ -154,11 +176,15 @@ removes itself.
 
 ## Troubleshooting
 
-**Nothing happens when I play.** Open **Settings → MIDI Monitor** and play a key. If
-messages appear there, the mod is receiving fine and the issue is mapping — check you're
-holding an instrument, and check the root note. If nothing appears, the mod is not
-receiving: run `midi devices`, and make sure no other application has the port open (MIDI
-inputs on Windows are exclusive — a DAW will lock the device).
+**Nothing happens when I play.** Open **Settings → MIDI Monitor** and play a key. This is
+the fastest way to split the problem in half:
+
+![The MIDI Monitor showing live note on/off messages with note names and velocities](docs/screenshots/06-midi-monitor.png)
+
+If messages appear there, the mod is receiving fine and the issue is mapping — check
+you're holding an instrument, and check the root note. If nothing appears, the mod isn't
+receiving at all: run `midi devices`, and make sure no other application has the port open
+(MIDI inputs on Windows are exclusive — a DAW will lock the device).
 
 **It worked, then stopped.** `midi panic`, then play again.
 
@@ -208,14 +234,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more.
 MIT — see [LICENSE](LICENSE).
 
 Duck Game is © Landon Podbielski. This is an unofficial community mod.
-
-## Screenshots
-
-| | |
-|---|---|
-| ![Settings](docs/screenshots/01-settings-menu.png) | ![Device picker](docs/screenshots/02-device-picker.png) |
-| Settings root — live device status | Device picker, auto-detected |
-| ![Drum mapping](docs/screenshots/03-drum-mapping.png) | ![Play options](docs/screenshots/05-play-options.png) |
-| Drum mapping with MIDI-learn | Play options |
-| ![Setup wizard](docs/screenshots/07-setup-wizard.png) | ![HUD](docs/screenshots/08-hud-live-note.png) |
-| First-run wizard, live step detection | In-play HUD showing the last note |

@@ -330,21 +330,28 @@ namespace DuckGame.MidiController
 
         private static void BuildMonitorMenu(float cx, float cy)
         {
-            UIMenu m = new UIMenu("@QUACK@MIDI MONITOR", cx, cy, 270f,
+            UIMenu m = new UIMenu("@QUACK@MIDI MONITOR", cx, cy, 300f,
                 conString: "@CANCEL@BACK");
 
             m.Add(new UIText("PLAY SOMETHING - MESSAGES APPEAR BELOW", Colors.DGYellow, UIAlign.Center), true);
             for (int i = 0; i < 12; i++)
             {
                 int line = i;
+                // Centred, not left-aligned: a left-aligned UIText added straight to a
+                // UIMenu anchors outside the dialog border and the rows spill over the
+                // frame. The bitmap font is monospace, so padding every row to the same
+                // width (see MonitorLine) makes centred rows line up as columns anyway.
                 m.Add(new UIText(new Func<string>(delegate { return MonitorLine(line); }),
-                    Color.White, UIAlign.Left), true);
+                    Color.White, UIAlign.Center), true);
             }
             m.Add(MakeBackItem(m), true);
 
             m.Close();
             _monitorMenu = m;
         }
+
+        /// <summary>One monitor row, newest first, padded so the columns line up.</summary>
+        private const int MonitorLineWidth = 24;
 
         private static string MonitorLine(int index)
         {
@@ -354,7 +361,10 @@ namespace DuckGame.MidiController
             // Newest at the top.
             int i = lines.Length - 1 - index;
             if (i < 0 || i >= lines.Length) return "";
-            return lines[i];
+
+            string s = lines[i];
+            if (s.Length > MonitorLineWidth) s = s.Substring(0, MonitorLineWidth);
+            return s.PadRight(MonitorLineWidth);
         }
 
         // --- first-run wizard -----------------------------------------------
