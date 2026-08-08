@@ -113,12 +113,44 @@ text and safe to hand-edit — handy for sharing a mapping.
 
 ## Multiplayer
 
-Notes reach other players through Duck Game's own networking, so **nobody else needs the
-mod to hear you**.
+**Public lobbies work, and nobody else needs the mod.**
 
-⚠️ **Duck Game refuses to join lobbies whose mod list doesn't match yours.** This is how
-the game works and no mod can change it — turn this mod off in the Mods menu before
-joining public lobbies.
+Notes reach other players through Duck Game's own networking — melodic instruments
+replicate `notePitch` via `StateBinding`, drums via `NetSoundEffect`, quacks via
+`quackPitch`. What arrives on their machine is byte-identical to a human playing the same
+notes on a keyboard.
+
+### How it stays joinable
+
+Duck Game refuses to join a lobby unless your *mod hash* matches the host's. That hash is
+a **content-compatibility** check — its job is to stop mods that add items, weapons or
+network messages from desyncing a lobby. Left alone, installing any mod at all locks you
+out of every public lobby.
+
+This mod removes itself from that hash at load time, so your client is indistinguishable
+from an unmodded one. That's legitimate here because the mod is genuinely content-free:
+
+- it declares **no** `Thing`, `AmmoType`, `DestroyType` or `NetMessage` subclasses, so the
+  separate `datahash` (`messageTypeHash + Editor.thingTypesHash`) is untouched;
+- it only synthesizes **local input for your own duck**, and only instrument and quack
+  triggers — never movement, never firing a real weapon;
+- Duck Game's own developers keep a hardcoded exemption list (`brokenclientsidemods`) for
+  exactly this category of client-side mod. That list lives in the game binary and can't
+  be added to from outside, so dropping out of the accessible-mod list is the equivalent.
+
+Check it any time with `midi status`:
+
+```
+[MIDI]   lobbies:    public lobbies OK (mod hash "nomods")
+```
+
+**The honest trade-off:** because the mod is excluded from the hash, it also doesn't
+appear in a lobby's mod list, so a host enforcing a strict "no mods" policy can't see it.
+If you'd rather be strictly visible, set `lobbyCompat=false` in the config — you'll then
+only be able to join lobbies whose mod set matches yours exactly.
+
+If you have *other* mods installed, those still count toward the hash as normal; this only
+removes itself.
 
 ## Troubleshooting
 

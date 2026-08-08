@@ -58,6 +58,17 @@ namespace DuckGame.MidiController
 
         public static bool firstRunDone;
 
+        /// <summary>
+        /// Stay out of Duck Game's lobby mod hash so public lobbies remain joinable.
+        /// </summary>
+        /// <remarks>
+        /// On by default: without it, installing any mod locks you out of every lobby
+        /// whose mod set differs from yours. Turning it off makes this client strictly
+        /// visible as modded, at the cost of only matching identically-modded lobbies.
+        /// Read at startup only - changing it needs a restart. See LobbyCompat.
+        /// </remarks>
+        public static bool lobbyCompat = true;
+
         // --- persistence ----------------------------------------------------
 
         public static string configPath
@@ -120,6 +131,7 @@ namespace DuckGame.MidiController
                         case "showhud": showHud = ParseBool(val, showHud); break;
                         case "playerslot": playerSlot = ClampInt(ParseInt(val, playerSlot), -1, 3); break;
                         case "firstrundone": firstRunDone = ParseBool(val, firstRunDone); break;
+                        case "lobbycompat": lobbyCompat = ParseBool(val, lobbyCompat); break;
                         case "bind":
                             if (!ParseBind(val)) badLines++;
                             break;
@@ -202,6 +214,9 @@ namespace DuckGame.MidiController
                 sb.AppendLine("showHud=" + Bool(showHud));
                 sb.AppendLine("playerSlot=" + playerSlot);
                 sb.AppendLine("firstRunDone=" + Bool(firstRunDone));
+                sb.AppendLine("# Keeps this mod out of the lobby mod hash so you can play with");
+                sb.AppendLine("# people who don't have it. Restart the game to apply a change.");
+                sb.AppendLine("lobbyCompat=" + Bool(lobbyCompat));
 
                 List<MidiBind> binds = MidiMapping.binds;
                 for (int i = 0; i < binds.Count; i++)
@@ -234,6 +249,7 @@ namespace DuckGame.MidiController
             legatoBend = false;
             showHud = true;
             playerSlot = -1;
+            lobbyCompat = true;
             MidiMapping.ClearBinds();
             Log.Good("settings reset to defaults.");
         }

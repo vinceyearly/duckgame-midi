@@ -52,6 +52,20 @@ namespace DuckGame.MidiController
 
         // --- lifecycle ------------------------------------------------------
 
+        /// <summary>
+        /// Deferred startup, run on the first frame.
+        /// </summary>
+        /// <remarks>
+        /// Opening a MIDI device touches winmm and spins up a poll timer, which is not
+        /// something to do during mod load. OnStart would have been the natural home, but
+        /// ModLoader never calls it for us - see LobbyCompat - so the first frame it is.
+        /// </remarks>
+        internal void EnsureStarted()
+        {
+            if (_startedHardware) return;
+            StartIfEnabled();
+        }
+
         internal void StartIfEnabled()
         {
             if (_startedHardware) return;
@@ -171,6 +185,10 @@ namespace DuckGame.MidiController
         {
             try
             {
+                // PostUpdate runs unconditionally, so it is the reliable place to do the
+                // one-time deferred startup - PreUpdate is skipped while paused.
+                EnsureStarted();
+
                 // While the pause menu is up, shouldPauseGameplay is true and PreUpdate
                 // does not run - so the queue would back up and MIDI-learn would never
                 // see a message. PostUpdate always runs, so drain here for UI purposes

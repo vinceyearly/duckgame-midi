@@ -124,6 +124,17 @@ namespace DuckGame.MidiController
             Log.Info("  messages:   " + MidiListener.messagesReceived +
                      " received, " + MidiListener.messagesDropped + " dropped, " +
                      MidiListener.queueDepth + " queued");
+            // The whole point of lobby compat is that it is checkable, not silent.
+            string hash = LobbyCompat.CurrentModHash();
+            if (!MidiConfig.lobbyCompat)
+                Log.Warn("  lobbies:    OFF by config - only identically-modded lobbies");
+            else if (LobbyCompat.looksUnmodded())
+                Log.Good("  lobbies:    public lobbies OK (mod hash \"" + hash + "\")");
+            else if (LobbyCompat.applied)
+                Log.Info("  lobbies:    hidden from hash; other mods still count (\"" + hash + "\")");
+            else
+                Log.Error("  lobbies:    NOT hidden - " + LobbyCompat.failureReason);
+
             Log.Info("  root note:  " + MidiConfig.rootNote + " (" + MidiMessage.NoteName(MidiConfig.rootNote) + ")");
             Log.Info("  quack ch:   " + (MidiConfig.quackChannel + 1));
             Log.Info("  config:     " + MidiConfig.configPath);
