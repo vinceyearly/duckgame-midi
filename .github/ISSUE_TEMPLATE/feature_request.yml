@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like it to do
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: What are you trying to play
+      description: >
+        Concrete musical context helps a lot - what instrument, what kind of part,
+        what your controller sends.
+
+  - type: markdown
+    attributes:
+      value: |
+        Worth knowing before you ask: several limits come from Duck Game itself and
+        cannot be fixed from a mod - the trumpet only has 4 pitches, melodic instruments
+        only have 13 notes, quack pitch only bends upward, and open hi-hat is broadcast
+        to other players as a closed hi-hat. See the README's "Known limitations".

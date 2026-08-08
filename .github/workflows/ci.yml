@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    name: C# 5 syntax check
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # This mod ships as source and is compiled by Duck Game at startup, using the
+      # in-box .NET Framework csc - which is C# 5. There is no way to link against
+      # DuckGame.exe here (it is not redistributable), so CI does the next best thing:
+      # parse every file at /langversion:5 and fail on anything newer. That catches
+      # string interpolation, ?., expression-bodied members, nameof, tuples and friends,
+      # which would otherwise only surface as a silent mod-load failure for players.
+      - name: Parse all sources at C# 5
+        shell: pwsh
+        run: |
+          $csc = Get-ChildItem "$env:WinDir\Microsoft.NET\Framework64\v4.0.30319\csc.exe" -ErrorAction SilentlyContinue
+          if (-not $csc) { $csc = Get-ChildItem "$env:WinDir\Microsoft.NET\Framework\v4.0.30319\csc.exe" }
+          if (-not $csc) { Write-Error "no .NET Framework csc.exe found"; exit 2 }
+
+          $sources = @(Get-ChildItem src -Filter *.cs -Recurse | Select-Object -ExpandProperty FullName)
+          Write-Host "Checking $($sources.Count) file(s) at /langversion:5"
+
+          $rsp = [System.IO.Path]::GetTempFileName() + '.rsp'
+          $lines = @('/target:library', '/nologo', '/langversion:5', '/define:DGR',
+                     "/out:$([System.IO.Path]::GetTempPath())ci-parse.dll")
+          $lines += $sources | ForEach-Object { '"' + $_ + '"' }
+          [System.IO.File]::WriteAllLines($rsp, $lines, [System.Text.Encoding]::Default)
+
+          $out = & $csc.FullName "@$rsp" 2>&1
+
+          # Syntax and language-version errors are the signal. Type-resolution errors
+          # (CS0246 DuckGame, CS0103, CS0234, CS0117, CS0122, CS0012, CS1061...) are
+          # expected and ignored - the game's assemblies are not available here.
+          $ignored = 'CS0246|CS0234|CS0103|CS0117|CS0122|CS0012|CS1061|CS0518|CS1069|CS0234'
+          $fatal = @($out | Where-Object { $_ -match ':\s*error\s' -and $_ -notmatch $ignored })
+
+          if ($fatal.Count -gt 0) {
+            Write-Host "::error::C# 5 syntax check failed"
+            $fatal | ForEach-Object { Write-Host $_ }
+            exit 1
+          }
+          Write-Host "OK - no syntax or language-version errors"
+
+  hygiene:
+    name: Mod packaging hygiene
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Duck Game globs *.cs recursively from the whole mod folder, so a stray source
+      # file outside src/ would silently become part of the mod.
+      - name: No .cs files outside src/
+        run: |
+          stray=$(find . -name '*.cs' -not -path './src/*' -not -path './.git/*')
+          if [ -n "$stray" ]; then
+            echo "::error::.cs files found outside src/ - Duck Game would compile these too:"
+            echo "$stray"
+            exit 1
+          fi
+          echo "OK"
+
+      - name: mod.conf is present and well-formed
+        run: |
+          test -f mod.conf || { echo "::error::mod.conf missing"; exit 1; }
+          grep -q '<MajorSupportedRevision>1</MajorSupportedRevision>' mod.conf \
+            || { echo "::error::MajorSupportedRevision must be 1"; exit 1; }
+          grep -q 'NoCompilation' mod.conf \
+            && { echo "::error::NoCompilation would stop the game compiling our source"; exit 1; }
+          echo "OK"
+
+      - name: No compiled artifacts committed
+        run: |
+          bad=$(find . -name '*_compiled*.dll' -o -name '*_compiled*.hash' -o -name '*_build.log' | grep -v './.git/' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::build artifacts committed - add them to .gitignore:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "OK"

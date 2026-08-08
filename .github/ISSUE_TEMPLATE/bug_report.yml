@@ -1,0 +1,74 @@
+name: Bug report
+description: Something doesn't work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: open **Settings → MIDI Monitor** (F9) and play a key.
+        Whether messages appear there tells us which half of the problem to look at.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: status
+    attributes:
+      label: Output of `midi status`
+      description: Open the console with ` and run `midi status`. Paste it here.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: monitor
+    attributes:
+      label: Does the MIDI Monitor show messages when you play?
+      options:
+        - "Yes - messages appear"
+        - "No - nothing appears"
+        - "Haven't checked"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: test
+    attributes:
+      label: Does `midi test scale` work (holding a saxophone)?
+      description: This plays synthetic notes with no hardware involved.
+      options:
+        - "Yes - I hear notes"
+        - "No - silent"
+        - "Haven't checked"
+    validations:
+      required: true
+
+  - type: input
+    id: controller
+    attributes:
+      label: MIDI controller
+      placeholder: e.g. Akai MPK Mini mkII
+    validations:
+      required: true
+
+  - type: dropdown
+    id: build
+    attributes:
+      label: Which Duck Game build?
+      options:
+        - "Steam (stock)"
+        - "Duck Game Rebuilt"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: mods
+    attributes:
+      label: Other mods enabled
+      description: Mod interactions are a real source of problems, especially at load time.

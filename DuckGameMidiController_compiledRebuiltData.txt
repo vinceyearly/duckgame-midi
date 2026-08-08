@@ -1,0 +1,31 @@
+08/08/2026 14:54:29|22
+Type Order
+DuckGame.MidiController.MidiListener
+DuckGame.MidiController.MidiKind
+DuckGame.MidiController.MidiMessage
+DuckGame.MidiController.NAudioReflection
+DuckGame.MidiController.MidiCommands
+DuckGame.MidiController.DuckHook
+DuckGame.MidiController.MidiInputProfile
+DuckGame.MidiController.Log
+DuckGame.MidiController.MidiControllerMod
+DuckGame.MidiController.MidiEngine
+DuckGame.MidiController.MidiEngine+PendingInject
+DuckGame.MidiController.PolyphonyPolicy
+DuckGame.MidiController.MidiConfig
+DuckGame.MidiController.InstrumentKind
+DuckGame.MidiController.DrumVoice
+DuckGame.MidiController.Instruments
+DuckGame.MidiController.InstrumentRouter
+DuckGame.MidiController.BindTarget
+DuckGame.MidiController.RouteResult
+DuckGame.MidiController.MidiBind
+DuckGame.MidiController.MidiMapping
+DuckGame.MidiController.NoteStack
+DuckGame.MidiController.MidiHud
+DuckGame.MidiController.MidiSettingsMenu
+DuckGame.MidiController.UIMidiLearnElement
+<PrivateImplementationDetails>{E93FD7F2-B6E7-4B0B-848D-B4D3872DA223}
+<PrivateImplementationDetails>{E93FD7F2-B6E7-4B0B-848D-B4D3872DA223}+__StaticArrayInitTypeSize=32
+DuckGame.MidiController.MidiSettingsMenu+<>c__DisplayClass2
+DuckGame.MidiController.MidiSettingsMenu+<>c__DisplayClass5

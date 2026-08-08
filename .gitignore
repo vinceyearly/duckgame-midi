@@ -1,0 +1,22 @@
+# Duck Game mod loader build artifacts (generated next to mod.conf at runtime)
+*_compiled.dll
+*_compiled.hash
+*_compiled_Rebuilt.dll
+*_build.log
+RebuiltData.txt
+
+# Written back by the in-game Workshop uploader; keep local
+# (remove this line if you want the published WorkshopID tracked)
+
+# Build / IDE
+obj/
+bin/
+.vs/
+*.user
+*.suo
+*.sln.docstates
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
