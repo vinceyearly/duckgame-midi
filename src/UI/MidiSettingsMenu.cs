@@ -26,6 +26,7 @@ namespace DuckGame.MidiController
         private static UIMenu _optionsMenu;
         private static UIMenu _monitorMenu;
         private static UIMenu _wizardMenu;
+        private static UIMenu _seqMenu;
 
         private static bool _openRequested;
         private static bool _wizardRequested;
@@ -119,6 +120,7 @@ namespace DuckGame.MidiController
             BuildOptionsMenu(cx, cy);
             BuildMonitorMenu(cx, cy);
             BuildWizardMenu(cx, cy);
+            BuildSequencerMenu(cx, cy);
             BuildRoot(cx, cy);
             WireBackItems();
         }
@@ -137,6 +139,7 @@ namespace DuckGame.MidiController
             m.Add(new UIMenuItem("DRUM MAPPING", new UIMenuActionOpenMenu(m, _drumMapMenu)), true);
             m.Add(new UIMenuItem("NOTE MAPPING", new UIMenuActionOpenMenu(m, _melodicMapMenu)), true);
             m.Add(new UIMenuItem("PLAY OPTIONS", new UIMenuActionOpenMenu(m, _optionsMenu)), true);
+            m.Add(new UIMenuItem("STEP SEQUENCER", new UIMenuActionOpenMenu(m, _seqMenu)), true);
             m.Add(new UIMenuItem("MIDI MONITOR", new UIMenuActionOpenMenu(m, _monitorMenu)), true);
             m.Add(new UIMenuItem("SETUP WIZARD", new UIMenuActionOpenMenu(m, _wizardMenu)), true);
 
@@ -365,6 +368,163 @@ namespace DuckGame.MidiController
             string s = lines[i];
             if (s.Length > MonitorLineWidth) s = s.Substring(0, MonitorLineWidth);
             return s.PadRight(MonitorLineWidth);
+        }
+
+        // --- step sequencer -------------------------------------------------
+
+        private static void BuildSequencerMenu(float cx, float cy)
+        {
+            // The HUD camera is only 320x180 units. A UIMenu grows to fit its widest
+            // child, so both the title and every caption have to stay short or the whole
+            // dialog is pushed off the right of the screen.
+            UIMenu m = new UIMenu("@QUACK@SEQUENCER", cx, cy, 220f,
+                conString: "@CANCEL@BACK @SELECT@TOGGLE");
+
+            m.Add(new UIText(new Func<string>(SeqStatusLine), Color.White, UIAlign.Center), true);
+            m.Add(new UIText(new Func<string>(UISequencerRow.IndicatorLine),
+                Colors.DGGreen, UIAlign.Center), true);
+
+            for (int v = 0; v < (int)DrumVoice.Count; v++)
+                m.Add(new UISequencerRow((DrumVoice)v), true);
+            m.Add(new UISequencerRow(), true);   // melodic line
+
+            m.Add(new UIText(new Func<string>(SeqHintLine), Colors.DGYellow, UIAlign.Center), true);
+
+            m.Add(new UIMenuItem(new Func<string>(PlayLabel),
+                new UIMenuActionCallFunction(new UIMenuActionCallFunction.Function(SeqTogglePlay))), true);
+            m.Add(new UIMenuItem(new Func<string>(RecordLabel),
+                new UIMenuActionCallFunction(new UIMenuActionCallFunction.Function(SeqToggleRecord))), true);
+
+            m.Add(new UIMenuItemNumber("TEMPO", null,
+                new FieldBinding(new SeqBpmProxy(), "value", 40f, 300f, 1f), 5), true);
+            m.Add(new UIMenuItemNumber("SWING %", null,
+                new FieldBinding(new SeqSwingProxy(), "value", 0f, 45f, 1f), 5), true);
+            m.Add(new UIMenuItemNumber("STEPS", null,
+                new FieldBinding(new SeqLengthProxy(), "value", 1f, StepPattern.MaxSteps, 1f), 1), true);
+            m.Add(new UIMenuItemNumber("PATTERN", null,
+                new FieldBinding(new SeqSlotProxy(), "value", 1f, StepSequencer.SlotCount, 1f), 1), true);
+
+            m.Add(new UIMenuItem("CLEAR PATTERN",
+                new UIMenuActionCallFunction(new UIMenuActionCallFunction.Function(SeqClear))), true);
+            m.Add(MakeBackItem(m), true);
+
+            m.Close();
+            _seqMenu = m;
+        }
+
+        private static string SeqStatusLine()
+        {
+            MidiEngine e = MidiControllerMod.engine;
+            if (e == null) return "";
+            StepSequencer s = e.sequencer;
+
+            string transport = s.recording ? "|DGRED|REC"
+                             : (s.playing ? "|DGGREEN|PLAY" : "|GRAY|STOP");
+            string clock = s.clockSource == ClockSource.External
+                ? "|DGGREEN|EXT" : ("|WHITE|" + s.bpm);
+
+            return transport + "|WHITE| P" + (s.slot + 1) + " " + clock;
+        }
+
+        /// <summary>Tells you why nothing is playing, which is nearly always the reason.</summary>
+        private static string SeqHintLine()
+        {
+            MidiEngine e = MidiControllerMod.engine;
+            if (e == null) return "";
+            // Keep every caption at or under the grid's width (label + 16 cells = 22
+            // characters). A UIMenu grows to fit its widest child, so one long line here
+            // would push the whole dialog off screen.
+            if (e.heldInstrument == InstrumentKind.DrumSet) return "DRUM TRACKS LIVE";
+            if (Instruments.IsMelodic(e.heldInstrument)) return "NOTE TRACK LIVE";
+            return "HOLD AN INSTRUMENT";
+        }
+
+        private static string PlayLabel()
+        {
+            MidiEngine e = MidiControllerMod.engine;
+            if (e == null) return "PLAY";
+            return e.sequencer.playing ? "STOP" : "PLAY";
+        }
+
+        private static string RecordLabel()
+        {
+            MidiEngine e = MidiControllerMod.engine;
+            if (e == null) return "RECORD";
+            return e.sequencer.recording ? "RECORDING - STOP" : "RECORD";
+        }
+
+        private static void SeqTogglePlay()
+        {
+            MidiEngine e = MidiControllerMod.engine;
+            if (e == null) return;
+            e.sequencer.TogglePlay(e.router);
+            try { SFX.Play("consoleSelect"); } catch { }
+        }
+
+        private static void SeqToggleRecord()
+        {
+            MidiEngine e = MidiControllerMod.engine;
+            if (e == null) return;
+            e.sequencer.ToggleRecord();
+            try { SFX.Play("consoleSelect"); } catch { }
+        }
+
+        private static void SeqClear()
+        {
+            MidiEngine e = MidiControllerMod.engine;
+            if (e == null) return;
+            e.sequencer.pattern.Clear();
+            MidiConfig.Save();
+            Log.Good("pattern cleared.");
+            try { SFX.Play("consoleSelect"); } catch { }
+        }
+
+        // FieldBinding reflects over a public instance field or property, so the
+        // sequencer's clamped values are exposed through these tiny adapters rather than
+        // duplicating the clamping in the UI.
+
+        public class SeqBpmProxy
+        {
+            public int value
+            {
+                get { MidiEngine e = MidiControllerMod.engine; return e == null ? 120 : e.sequencer.bpm; }
+                set { MidiEngine e = MidiControllerMod.engine; if (e != null) e.sequencer.bpm = value; }
+            }
+        }
+
+        public class SeqSwingProxy
+        {
+            public int value
+            {
+                get
+                {
+                    MidiEngine e = MidiControllerMod.engine;
+                    return e == null ? 0 : (int)Math.Round(e.sequencer.swing * 100f);
+                }
+                set
+                {
+                    MidiEngine e = MidiControllerMod.engine;
+                    if (e != null) e.sequencer.swing = value / 100f;
+                }
+            }
+        }
+
+        public class SeqLengthProxy
+        {
+            public int value
+            {
+                get { MidiEngine e = MidiControllerMod.engine; return e == null ? 16 : e.sequencer.pattern.length; }
+                set { MidiEngine e = MidiControllerMod.engine; if (e != null) e.sequencer.pattern.length = value; }
+            }
+        }
+
+        public class SeqSlotProxy
+        {
+            public int value
+            {
+                get { MidiEngine e = MidiControllerMod.engine; return e == null ? 1 : e.sequencer.slot + 1; }
+                set { MidiEngine e = MidiControllerMod.engine; if (e != null) e.sequencer.SelectSlot(value - 1); }
+            }
         }
 
         // --- first-run wizard -----------------------------------------------

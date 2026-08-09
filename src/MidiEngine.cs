@@ -16,6 +16,7 @@ namespace DuckGame.MidiController
     {
         private readonly MidiInputProfile _profile = new MidiInputProfile();
         private readonly InstrumentRouter _router = new InstrumentRouter();
+        private readonly StepSequencer _sequencer = new StepSequencer();
 
         private Duck _attachedDuck;
         private InstrumentKind _heldInstrument = InstrumentKind.None;
@@ -46,6 +47,8 @@ namespace DuckGame.MidiController
         private MidiMessage _learnResult;
 
         internal InstrumentKind heldInstrument { get { return _heldInstrument; } }
+        internal StepSequencer sequencer { get { return _sequencer; } }
+        internal InstrumentRouter router { get { return _router; } }
         internal bool isAttached { get { return _attachedDuck != null; } }
         internal string lastNoteDescription { get { return _lastNoteDescription; } }
         internal int framesSinceActivity { get { return _framesSinceActivity; } }
@@ -162,12 +165,21 @@ namespace DuckGame.MidiController
                 // Re-resolve what is held EVERY frame, before emitting anything. This is
                 // the guard that stops us injecting SHOOT into a real gun if the player
                 // swaps weapons mid-note.
+                InstrumentKind previouslyHeld = _heldInstrument;
                 _heldInstrument = Instruments.Detect(duck.holdObject);
+                // Swapping instruments mid-pattern would otherwise leave a sequenced note
+                // hanging on the one you just put down.
+                if (_heldInstrument != previouslyHeld)
+                    _sequencer.OnInstrumentLost(_router);
 
                 Attach(duck);
                 _profile.BeginFrame(ResolveRealProfile(duck));
 
                 DrainQueue(true);
+
+                // After live input, before emission: a sequenced hit this frame should be
+                // indistinguishable from one you played.
+                _sequencer.Tick(_heldInstrument, _router);
 
                 bool suppressShoot = _profile.justAttached;
                 _profile.justAttached = false;
@@ -222,6 +234,16 @@ namespace DuckGame.MidiController
                 MidiMessage m = MidiMessage.Decode(raw);
                 if (m.kind == MidiKind.Unknown) continue;
 
+                // Transport messages drive the sequencer whether or not gameplay is live,
+                // so a pattern stays locked to hardware even while the menu is open.
+                if (m.kind == MidiKind.Clock || m.kind == MidiKind.Start ||
+                    m.kind == MidiKind.Continue || m.kind == MidiKind.Stop)
+                {
+                    _sequencer.HandleTransport(m, _router);
+                    RecordForMonitor(m);
+                    continue;
+                }
+
                 RecordForMonitor(m);
 
                 if (_learnArmed)
@@ -237,7 +259,10 @@ namespace DuckGame.MidiController
                 }
 
                 if (allowPlay)
+                {
                     _router.HandleMessage(m, _heldInstrument);
+                    RecordIfArmed(m);
+                }
 
                 // Bound the work per frame so a stuck controller can't stall the game.
                 if (++guard > 256) break;
@@ -249,8 +274,33 @@ namespace DuckGame.MidiController
             DrainQueue(false);
         }
 
+        /// <summary>
+        /// Captures a live hit into the pattern when record is armed.
+        /// </summary>
+        /// <remarks>
+        /// Routing is resolved a second time here rather than threaded out of
+        /// HandleMessage, so what gets recorded is exactly what you heard - including any
+        /// custom bindings. It is a dictionary lookup and a couple of comparisons.
+        /// </remarks>
+        private void RecordIfArmed(MidiMessage m)
+        {
+            if (!_sequencer.recording) return;
+            if (m.kind != MidiKind.NoteOn) return;
+            if (m.value < MidiConfig.velocityFloor) return;
+
+            RouteResult r = MidiMapping.Route(m, _heldInstrument);
+            if (MidiMapping.IsDrumTarget(r.target))
+                _sequencer.RecordDrum(r.voice);
+            else if (r.target == BindTarget.MelodicStep)
+                _sequencer.RecordNote(r.step);
+        }
+
         private void RecordForMonitor(MidiMessage m)
         {
+            // Clock is 24 pulses per quarter note - at 120 BPM that is 48 messages a
+            // second, which would blow every useful line out of the monitor in a blink.
+            if (m.kind == MidiKind.Clock) return;
+
             _monitor.Enqueue(m.ToString());
             while (_monitor.Count > MonitorCapacity) _monitor.Dequeue();
 
@@ -364,6 +414,7 @@ namespace DuckGame.MidiController
                     DuckHook.SetVirtualInput(_attachedDuck, null);
                 _attachedDuck = null;
             }
+            _sequencer.OnInstrumentLost(_router);
             _router.Panic(_profile);
             _profile.ClearAll();
             _heldInstrument = InstrumentKind.None;

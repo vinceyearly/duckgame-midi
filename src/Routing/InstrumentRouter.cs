@@ -105,6 +105,36 @@ namespace DuckGame.MidiController
             }
         }
 
+        // --- sequencer entry points -----------------------------------------
+        // The sequencer stores voices and scale steps, not MIDI note numbers, so it feeds
+        // the router directly rather than synthesizing notes and routing them back through
+        // MidiMapping. That avoids a lossy round-trip through the GM drum map, and means a
+        // sequenced hit lands in exactly the same per-voice queue and gap machine that live
+        // playing uses - so playback is indistinguishable from someone playing it by hand.
+
+        internal void SequencerDrumHit(DrumVoice v)
+        {
+            int idx = (int)v;
+            if (idx < 0 || idx >= _pendingHits.Length) return;
+            _pendingHits[idx]++;
+            if (_pendingHits[idx] > MaxQueuedHits) _pendingHits[idx] = MaxQueuedHits;
+        }
+
+        /// <summary>
+        /// Sounds a sequenced melodic note. The note number is <c>rootNote + step</c> so it
+        /// resolves back through the normal note maths, and so an explicit user binding on
+        /// that note still wins - which is what someone who remapped it would expect.
+        /// </summary>
+        internal void SequencerNoteOn(int noteNumber)
+        {
+            _notes.NoteOn(noteNumber);
+        }
+
+        internal void SequencerNoteOff(int noteNumber)
+        {
+            _notes.NoteOff(noteNumber);
+        }
+
         // --- emission (once per frame, into the profile) ---------------------
 
         internal void Emit(MidiInputProfile profile, InstrumentKind held, bool suppressShoot)

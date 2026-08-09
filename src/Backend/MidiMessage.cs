@@ -8,7 +8,14 @@ namespace DuckGame.MidiController
         NoteOn,
         NoteOff,
         ControlChange,
-        PitchBend
+        PitchBend,
+
+        // System realtime. These carry no channel and can arrive between the bytes of
+        // any other message. Hardware with a transport sends them; the MPK Mini does not.
+        Clock,      // 0xF8, 24 per quarter note
+        Start,      // 0xFA, restart from the top
+        Continue,   // 0xFB, resume from where we stopped
+        Stop        // 0xFC
     }
 
     /// <summary>
@@ -42,10 +49,17 @@ namespace DuckGame.MidiController
             int d1 = (raw >> 8) & 0x7F;
             int d2 = (raw >> 16) & 0x7F;
 
-            // 0xF0..0xFF are system messages and carry no channel - ignore them entirely.
+            // 0xF0..0xFF are system messages and carry no channel.
             if (status >= 0xF0)
             {
-                m.kind = MidiKind.Unknown;
+                switch (status)
+                {
+                    case 0xF8: m.kind = MidiKind.Clock; break;
+                    case 0xFA: m.kind = MidiKind.Start; break;
+                    case 0xFB: m.kind = MidiKind.Continue; break;
+                    case 0xFC: m.kind = MidiKind.Stop; break;
+                    default: m.kind = MidiKind.Unknown; break;   // sysex, MTC, tune request
+                }
                 return m;
             }
 
@@ -96,6 +110,14 @@ namespace DuckGame.MidiController
                     return "ch" + (channel + 1) + " CC" + number + " = " + value;
                 case MidiKind.PitchBend:
                     return "ch" + (channel + 1) + " BEND " + value;
+                case MidiKind.Clock:
+                    return "clock";
+                case MidiKind.Start:
+                    return "START";
+                case MidiKind.Continue:
+                    return "CONTINUE";
+                case MidiKind.Stop:
+                    return "STOP";
                 default:
                     return "raw 0x" + raw.ToString("X6");
             }

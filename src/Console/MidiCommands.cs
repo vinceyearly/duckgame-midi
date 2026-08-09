@@ -24,7 +24,8 @@ namespace DuckGame.MidiController
                 CMD.Argument[] args = new CMD.Argument[]
                 {
                     new CMD.String("action", true),
-                    new CMD.String("value", true)
+                    new CMD.String("value", true),
+                    new CMD.String("extra", true)
                 };
                 CMD cmd = new CMD("midi", args, RunCommand);
                 cmd.description =
@@ -41,10 +42,12 @@ namespace DuckGame.MidiController
         {
             string action = null;
             string value = null;
+            string extra = null;
             try
             {
                 action = cmd.Arg<string>("action");
                 value = cmd.Arg<string>("value");
+                extra = cmd.Arg<string>("extra");
             }
             catch { }
 
@@ -67,6 +70,8 @@ namespace DuckGame.MidiController
                 case "settings": MidiSettingsMenu.RequestOpen(); break;
                 case "wizard": MidiSettingsMenu.RequestOpenWizard(); break;
                 case "test": Test(value); break;
+                case "seq":
+                case "sequencer": Sequencer(value, extra); break;
                 default:
                     Log.Warn("unknown action \"" + action + "\". Try: midi help");
                     break;
@@ -87,6 +92,9 @@ namespace DuckGame.MidiController
             Log.Info("midi save|reload|reset   - settings file operations");
             Log.Info("midi test <what>         - play without a controller attached:");
             Log.Info("                           scale|drums|quack|<note number>");
+            Log.Info("midi seq <what>          - step sequencer:");
+            Log.Info("                           play|stop|rec|clear|status");
+            Log.Info("                           bpm <40-300>|swing <0-45>|len <1-32>|pat <1-4>");
         }
 
         private static void PrintStatus()
@@ -294,6 +302,88 @@ namespace DuckGame.MidiController
             }
 
             Log.Warn("usage: midi test <scale|drums|quack|0-127>");
+        }
+
+        // --- step sequencer -------------------------------------------------
+
+        private static void Sequencer(string sub, string arg)
+        {
+            MidiEngine e = MidiControllerMod.engine;
+            if (e == null) { Log.Error("engine not running."); return; }
+            StepSequencer s = e.sequencer;
+
+            if (string.IsNullOrEmpty(sub)) sub = "status";
+            sub = sub.Trim().ToLowerInvariant();
+
+            int n;
+            switch (sub)
+            {
+                case "play":
+                    s.Play();
+                    Log.Good("sequencer playing.");
+                    break;
+                case "stop":
+                    s.Stop(e.router);
+                    Log.Good("sequencer stopped.");
+                    break;
+                case "rec":
+                case "record":
+                    s.ToggleRecord();
+                    Log.Good(s.recording
+                        ? "recording - play along, hits snap to the nearest step."
+                        : "recording stopped.");
+                    break;
+                case "clear":
+                    s.pattern.Clear();
+                    MidiConfig.Save();
+                    Log.Good("pattern " + (s.slot + 1) + " cleared.");
+                    break;
+                case "bpm":
+                    if (int.TryParse(arg, out n)) { s.bpm = n; MidiConfig.Save(); Log.Good("tempo " + s.bpm + " BPM."); }
+                    else Log.Warn("usage: midi seq bpm <40-300>");
+                    break;
+                case "swing":
+                    if (int.TryParse(arg, out n)) { s.swing = n / 100f; MidiConfig.Save(); Log.Good("swing " + (int)(s.swing * 100) + "%."); }
+                    else Log.Warn("usage: midi seq swing <0-45>");
+                    break;
+                case "len":
+                case "length":
+                    if (int.TryParse(arg, out n)) { s.pattern.length = n; MidiConfig.Save(); Log.Good("pattern length " + s.pattern.length + " steps."); }
+                    else Log.Warn("usage: midi seq len <1-32>");
+                    break;
+                case "pat":
+                case "pattern":
+                    if (int.TryParse(arg, out n)) { s.SelectSlot(n - 1); Log.Good("pattern " + (s.slot + 1) + "."); }
+                    else Log.Warn("usage: midi seq pat <1-4>");
+                    break;
+                case "save":
+                    MidiConfig.Save();
+                    Log.Good("patterns saved.");
+                    break;
+                case "status":
+                    Log.Info("--- sequencer ---");
+                    Log.Info("  transport: " + (s.recording ? "RECORDING" : (s.playing ? "playing" : "stopped")));
+                    Log.Info("  clock:     " + (s.clockSource == ClockSource.External
+                                ? "external MIDI clock" : ("internal, " + s.bpm + " BPM")));
+                    Log.Info("  pattern:   " + (s.slot + 1) + " of " + StepSequencer.SlotCount +
+                             ", " + s.pattern.length + " steps, swing " + (int)(s.swing * 100) + "%");
+                    Log.Info("  step:      " + (s.currentStep + 1));
+                    // The grid is laid out in HUD-camera units, which change with
+                    // resolution - handy to have in a bug report when a row overflows.
+                    try
+                    {
+                        Log.Info("  hud:       " + (int)Layer.HUD.camera.width + " x " +
+                                 (int)Layer.HUD.camera.height + " units");
+                    }
+                    catch { }
+                    Log.Info("  holding:   " + Instruments.DisplayName(e.heldInstrument));
+                    if (s.pattern.isEmpty) Log.Warn("  pattern is empty - record something or edit it in the menu (F9)");
+                    break;
+                default:
+                    Log.Warn("unknown: midi seq " + sub);
+                    Log.Info("try: play|stop|rec|clear|status|bpm N|swing N|len N|pat N");
+                    break;
+            }
         }
 
         // --- spawning -------------------------------------------------------

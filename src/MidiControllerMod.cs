@@ -42,13 +42,17 @@ namespace DuckGame.MidiController
 
             try
             {
+                // The engine owns the sequencer, and the config file carries saved
+                // patterns - so it has to exist before Load runs or they are silently
+                // dropped on the first launch after a restart.
+                engine = new MidiEngine();
+
                 // Safe this early: ModLoader itself resolves DuckFile.modsDirectory (which
                 // goes through Steam.user) to find us in the first place, so the save path
                 // is already valid. Opening MIDI hardware is still deferred to frame one.
                 MidiConfig.Load();
                 MidiCommands.Register();
 
-                engine = new MidiEngine();
                 MonoMain.RegisterEngineUpdatable(engine);
 
                 // MUST happen here: the lobby hash is computed immediately after every

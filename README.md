@@ -99,6 +99,53 @@ hit the pad or key you want on it. Rows left alone stay on the automatic routing
 
 ![Note mapping, listing 13 scale steps from auto C4 up to auto C5](docs/screenshots/04-note-mapping.png)
 
+## Step sequencer
+
+A 16-step drum box with a melodic line, in the spirit of a hardware groovebox rather than
+a DAW. **Settings → Step Sequencer**, or `midi seq play`.
+
+Eight drum tracks, one monophonic note track (Duck Game's instruments have a single voice,
+so a chord isn't representable), four pattern slots, and per-track mute.
+
+**Programming it.** Move along the bar with **A/D**, toggle a step with **Space**, mute a
+track with **Menu1**. On the note row, **Ragdoll/Strafe** nudge the note under the cursor
+up and down — cells show `0`–`9` then `A`–`C` for the 13 scale steps, `.` for a rest.
+
+**Or play it in.** Hit **RECORD**, play along, and notes snap to the nearest step — ahead
+of the beat still lands on the beat. Recording overdubs, so you can layer a kick pass, then
+a hat pass. Routing is resolved the same way as live play, so your custom bindings are
+respected.
+
+**Tempo.** Runs on its own clock at 40–300 BPM with optional swing. If your hardware sends
+MIDI clock it locks to that automatically — start, stop and continue included — and the
+status line switches to `EXT CLOCK`. Swing is ignored while slaved, since your hardware is
+already applying its own.
+
+Patterns are saved with your settings and survive a restart.
+
+```
+midi seq play | stop | rec | clear | status
+midi seq bpm 120 | swing 20 | len 16 | pat 2
+```
+
+> **Known issue:** at high resolutions the grid page renders wider than the dialog frame,
+> so the right-hand steps and some captions are clipped. The sequencer itself is
+> unaffected — the console commands (`midi seq ...`) drive everything, and recording works
+> — but the grid editor needs a layout fix. Tracked as a bug, not a design limit.
+
+Three honest caveats:
+
+- **You have to stand still.** Duck Game only reads instrument input while the item is
+  *held*, and holding the kit pins your duck in place. A running pattern means standing in
+  the open. It's built for lobby jams, not firefights.
+- **Steps land on frame boundaries.** The clock runs on game frames at 60fps, so timing is
+  quantised to ~16.7ms and swing is coarse. That's deliberate — a frame-based clock stays
+  locked to game time and pauses with the game, where a wall-clock would drift on and then
+  lurch. It won't be DAW-tight.
+
+The transport keeps running even when you're not holding anything, so picking the kit back
+up drops you in on the beat rather than wherever the bar happened to be.
+
 ## Settings
 
 | Setting | What it does |

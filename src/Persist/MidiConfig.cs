@@ -135,6 +135,25 @@ namespace DuckGame.MidiController
                         case "bind":
                             if (!ParseBind(val)) badLines++;
                             break;
+                        case "seqsettings":
+                            {
+                                StepSequencer s = ActiveSequencer();
+                                if (s != null) s.DeserializeSettings(val);
+                            }
+                            break;
+                        case "seq":
+                            {
+                                StepSequencer s = ActiveSequencer();
+                                if (s == null) break;
+                                // Peek the slot, then parse straight into that pattern.
+                                string[] head = val.Split(':');
+                                int slotIndex;
+                                if (head.Length < 1 || !int.TryParse(head[0], out slotIndex)) { badLines++; break; }
+                                StepPattern target = s.SlotAt(slotIndex);
+                                if (target == null) { badLines++; break; }
+                                if (StepPattern.Deserialize(val, target) < 0) badLines++;
+                            }
+                            break;
                         default:
                             badLines++;
                             break;
@@ -218,6 +237,18 @@ namespace DuckGame.MidiController
                 sb.AppendLine("# people who don't have it. Restart the game to apply a change.");
                 sb.AppendLine("lobbyCompat=" + Bool(lobbyCompat));
 
+                StepSequencer seq = ActiveSequencer();
+                if (seq != null)
+                {
+                    sb.AppendLine("seqSettings=" + seq.SerializeSettings());
+                    for (int i = 0; i < StepSequencer.SlotCount; i++)
+                    {
+                        StepPattern p = seq.SlotAt(i);
+                        if (p == null || p.isEmpty) continue;   // don't clutter with empties
+                        sb.AppendLine("seq=" + p.Serialize(i));
+                    }
+                }
+
                 List<MidiBind> binds = MidiMapping.binds;
                 for (int i = 0; i < binds.Count; i++)
                 {
@@ -255,6 +286,21 @@ namespace DuckGame.MidiController
         }
 
         // --- small parse helpers (no exceptions escape) ---------------------
+
+        /// <summary>
+        /// The live sequencer, or null if the engine hasn't been constructed yet.
+        /// </summary>
+        /// <remarks>
+        /// Config is loaded during OnPreInitialize, and the engine is built in that same
+        /// method - so on the very first load this can legitimately be null and pattern
+        /// lines are skipped. MidiControllerMod therefore constructs the engine before
+        /// calling Load.
+        /// </remarks>
+        private static StepSequencer ActiveSequencer()
+        {
+            MidiEngine e = MidiControllerMod.engine;
+            return e == null ? null : e.sequencer;
+        }
 
         private static string Bool(bool b) { return b ? "true" : "false"; }
 
