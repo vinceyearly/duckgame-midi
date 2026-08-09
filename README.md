@@ -128,10 +128,12 @@ midi seq play | stop | rec | clear | status
 midi seq bpm 120 | swing 20 | len 16 | pat 2
 ```
 
-> **Known issue:** at high resolutions the grid page renders wider than the dialog frame,
-> so the right-hand steps and some captions are clipped. The sequencer itself is
-> unaffected — the console commands (`midi seq ...`) drive everything, and recording works
-> — but the grid editor needs a layout fix. Tracked as a bug, not a design limit.
+> **Known issue:** on at least one 2560×1440 setup the grid renders clipped at the right,
+> hiding the last few steps. Measured in game (`midi seq debug`) the layout is well within
+> bounds — a 154-unit row centred in a 300-unit dialog on a 320-unit camera — so this looks
+> like a display zoom rather than the layout itself. If you hit it, try a different
+> resolution or windowed mode, and please open an issue with your `midi seq debug` output.
+> The sequencer is unaffected either way: `midi seq ...` drives everything.
 
 Three honest caveats:
 

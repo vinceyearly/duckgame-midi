@@ -4,79 +4,38 @@ using System.Text;
 namespace DuckGame.MidiController
 {
     /// <summary>
-    /// One track of the step grid: a label followed by a cell per step.
+    /// Renders the step grid, and owns the edit mode that drives it.
     /// </summary>
     /// <remarks>
-    /// The cursor column is shared across every row (a static), so moving up and down
-    /// tracks keeps your place in the bar - which is how you actually program a beat.
+    /// WHY THE GRID IS NOT MADE OF MENU ITEMS.
     ///
-    /// Cells are drawn as coloured text rather than sprites. The bitmap font is monospace,
-    /// so a fixed-width label plus fixed-width cells lines the grid up for free, and the
-    /// game's own colour tags give a playhead and cursor without any custom rendering.
+    /// The obvious build is one UIMenuItem per track. It does not fit. UIMenuItem is a
+    /// UIDivider: the arrow goes in the left section and the text in the right, so the
+    /// text starts around the middle of the dialog. Measured in game, the HUD camera is
+    /// 320x180 units and menu text is drawn about 1.4x the width it reports, so a row of
+    /// 20 characters needs ~224 units but only has ~150 available. No combination of
+    /// dialog width or label length fixes that - narrowing the box just pushes the text
+    /// further off the right edge.
+    ///
+    /// A centred UIText spanning the full dialog does fit - the MIDI Monitor page renders
+    /// 24-character rows cleanly that way. So the grid is drawn as plain UIText lines and
+    /// input is handled by a single menu item that takes over the controls, using the same
+    /// UIMenu.globalUILock approach as MIDI-learn. That also reads better: the arrow keys
+    /// move the cursor instead of fighting menu navigation.
     /// </remarks>
-    public class UISequencerRow : UIMenuItem
+    internal static class SequencerGrid
     {
-        /// <summary>Shared edit cursor, in steps.</summary>
+        internal const int TrackCount = (int)DrumVoice.Count + 1;   // drums + melodic line
+        internal const int MelodicTrack = (int)DrumVoice.Count;
+
+        private const int LabelWidth = 4;
+
+        /// <summary>Step under the edit cursor, shared by every row.</summary>
         internal static int cursor;
-
-        private readonly bool _isMelodic;
-        private readonly DrumVoice _voice;
-
-        private bool _centred;
-
-        /// <summary>
-        /// Kept deliberately tight. The HUD camera is only a few hundred units wide, and
-        /// at 8px per character a label plus 32 cells has to stay under about 40 characters
-        /// or the row overflows the dialog and the labels get clipped off-screen.
-        /// </summary>
-        private const int LabelWidth = 6;
-
-        internal UISequencerRow(DrumVoice voice)
-            : base("", null, UIAlign.Left)
-        {
-            _voice = voice;
-            _isMelodic = false;
-            // Font is chosen in Refresh, from the pattern length.
-        }
-
-        /// <summary>Marker constructor for the melodic line.</summary>
-        internal UISequencerRow()
-            : base("", null, UIAlign.Left)
-        {
-            _isMelodic = true;
-            // Font is chosen in Refresh, from the pattern length.
-        }
-
-        /// <summary>
-        /// Renders the shared cursor and the playhead as a caption line above the grid.
-        /// </summary>
-        /// <remarks>
-        /// This exists because the rows themselves cannot use colour. Duck Game strips
-        /// "|COLOUR|" tags when drawing but measures the raw string for layout, so a tag
-        /// per cell made a 22-character row measure as ~180 and overflow the dialog no
-        /// matter how wide it was. Plain text plus one indicator line gives the same
-        /// information and actually fits.
-        /// </remarks>
-        internal static string IndicatorLine()
-        {
-            MidiEngine e = MidiControllerMod.engine;
-            if (e == null) return "";
-            StepSequencer s = e.sequencer;
-            StepPattern p = s.pattern;
-
-            int playhead = s.playing ? s.currentStep : -1;
-            StringBuilder sb = new StringBuilder();
-            sb.Append(' ', LabelWidth);
-            for (int i = 0; i < p.length; i++)
-            {
-                if (i == cursor && i == playhead) sb.Append('+');
-                else if (i == cursor) sb.Append('v');
-                else if (i == playhead) sb.Append('^');
-                else if (i % 4 == 0) sb.Append(':');    // beat markers
-                else sb.Append(' ');
-            }
-            return sb.ToString();
-        }
+        /// <summary>Which track row the cursor is on.</summary>
+        internal static int track;
+        /// <summary>True while the grid has taken over the controls.</summary>
+        internal static bool editing;
 
         private static StepSequencer seq
         {
@@ -87,131 +46,213 @@ namespace DuckGame.MidiController
             }
         }
 
-        internal static void MoveCursor(int delta, StepPattern p)
+        // --- rendering ------------------------------------------------------
+
+        /// <summary>One track row: "&gt;KICK X..X..X..X..X..".</summary>
+        internal static string RowText(int trackIndex)
         {
-            if (p == null) return;
+            StepSequencer s = seq;
+            if (s == null) return "";
+            StepPattern p = s.pattern;
+            ClampCursor(p);
+
+            bool melodic = (trackIndex == MelodicTrack);
+            bool muted = melodic ? s.melodicMute : s.GetMute((DrumVoice)trackIndex);
+
+            StringBuilder sb = new StringBuilder();
+            // Selection marker lives in the string so every row stays the same width and
+            // the columns line up under centring.
+            sb.Append(editing && track == trackIndex ? '>' : ' ');
+
+            string label = melodic ? "NOTE" : ShortName((DrumVoice)trackIndex);
+            if (label.Length > LabelWidth) label = label.Substring(0, LabelWidth);
+            sb.Append(label.PadRight(LabelWidth));
+            sb.Append(muted ? '-' : ' ');
+
+            for (int i = 0; i < p.length; i++)
+                sb.Append(CellChar(p, i, melodic, trackIndex));
+
+            return sb.ToString();
+        }
+
+        private static char CellChar(StepPattern p, int step, bool melodic, int trackIndex)
+        {
+            if (melodic)
+            {
+                int n = p.GetNote(step);
+                if (n == StepPattern.Rest) return '.';
+                // 0-9 then A-C for 10-12, so a cell is always one character.
+                return n < 10 ? (char)('0' + n) : (char)('A' + (n - 10));
+            }
+            return p.GetDrum((DrumVoice)trackIndex, step) ? 'X' : '.';
+        }
+
+        /// <summary>Caption line showing the cursor column and the playhead.</summary>
+        internal static string IndicatorLine()
+        {
+            StepSequencer s = seq;
+            if (s == null) return "";
+            StepPattern p = s.pattern;
+            ClampCursor(p);
+
+            int playhead = s.playing ? s.currentStep : -1;
+            StringBuilder sb = new StringBuilder();
+            sb.Append(' ', 1 + LabelWidth + 1);   // line up with the rows
+            for (int i = 0; i < p.length; i++)
+            {
+                if (i == cursor && i == playhead) sb.Append('+');
+                else if (i == cursor) sb.Append('v');
+                else if (i == playhead) sb.Append('^');
+                else if (i % 4 == 0) sb.Append(':');   // beat markers
+                else sb.Append(' ');
+            }
+            return sb.ToString();
+        }
+
+        // --- editing --------------------------------------------------------
+
+        private static void ClampCursor(StepPattern p)
+        {
+            if (cursor < 0) cursor = 0;
+            if (cursor >= p.length) cursor = p.length - 1;
+            if (track < 0) track = 0;
+            if (track >= TrackCount) track = TrackCount - 1;
+        }
+
+        internal static void MoveCursor(int delta)
+        {
+            StepSequencer s = seq;
+            if (s == null) return;
+            StepPattern p = s.pattern;
             cursor += delta;
             while (cursor < 0) cursor += p.length;
             while (cursor >= p.length) cursor -= p.length;
         }
 
-        public override void Activate(string trigger)
+        internal static void MoveTrack(int delta)
         {
-            StepSequencer s = seq;
-            if (s == null) { base.Activate(trigger); return; }
-            StepPattern p = s.pattern;
-
-            if (trigger == Triggers.MenuLeft) { MoveCursor(-1, p); return; }
-            if (trigger == Triggers.MenuRight) { MoveCursor(1, p); return; }
-
-            if (trigger == Triggers.Menu1)
-            {
-                if (_isMelodic) s.melodicMute = !s.melodicMute;
-                else s.ToggleMute(_voice);
-                try { SFX.Play("consoleSelect"); } catch { }
-                return;
-            }
-
-            if (trigger == Triggers.Select)
-            {
-                if (_isMelodic)
-                {
-                    // Toggle rest against a sensible default, so one press gives a note.
-                    int cur = p.GetNote(cursor);
-                    p.SetNote(cursor, cur == StepPattern.Rest ? 0 : StepPattern.Rest);
-                }
-                else
-                {
-                    p.ToggleDrum(_voice, cursor);
-                }
-                try { SFX.Play("consoleSelect"); } catch { }
-                return;
-            }
-
-            // Nudge the note under the cursor. Only meaningful on the melodic line.
-            if (_isMelodic && (trigger == Triggers.Ragdoll || trigger == Triggers.Strafe))
-            {
-                int cur = p.GetNote(cursor);
-                if (cur == StepPattern.Rest) cur = 0;
-                cur += (trigger == Triggers.Strafe) ? 1 : -1;
-                if (cur < 0) cur = 0;
-                if (cur > 12) cur = 12;
-                p.SetNote(cursor, cur);
-                try { SFX.Play("consoleSelect"); } catch { }
-                return;
-            }
-
-            base.Activate(trigger);
+            track += delta;
+            while (track < 0) track += TrackCount;
+            while (track >= TrackCount) track -= TrackCount;
         }
 
-        public override void Update()
-        {
-            // Must happen in Update, not Draw: the menu measures its children to size and
-            // centre itself, and that pass runs before Draw. Setting the text in Draw left
-            // the menu laid out for empty rows and then drawing full-width ones, so the
-            // dialog sat off-centre and the right-hand steps fell off the screen.
-            Refresh();
-            base.Update();
-        }
-
-        private void Refresh()
+        internal static void ToggleCell()
         {
             StepSequencer s = seq;
             if (s == null) return;
             StepPattern p = s.pattern;
-
-            if (cursor >= p.length) cursor = p.length - 1;
-            if (cursor < 0) cursor = 0;
-
-            if (!_centred)
+            if (track == MelodicTrack)
             {
-                // Left-aligned text anchors to the dialog's left edge and runs off the
-                // right of the frame; centring keeps it inside. Every row is the same
-                // length, so the columns still line up.
-                if (_textElement != null) _textElement.align = UIAlign.Center;
-                _centred = true;
+                int cur = p.GetNote(cursor);
+                p.SetNote(cursor, cur == StepPattern.Rest ? 0 : StepPattern.Rest);
             }
-
-            bool muted = _isMelodic ? s.melodicMute : s.GetMute(_voice);
-            string label = _isMelodic ? "NOTE" : ShortName(_voice);
-            if (label.Length > LabelWidth - 1) label = label.Substring(0, LabelWidth - 1);
-            // A muted track is marked with a dash rather than a colour - see below.
-            if (muted) label = "-" + label;
-            label = label.PadRight(LabelWidth).Substring(0, LabelWidth);
-
-            StringBuilder sb = new StringBuilder();
-            sb.Append(label);
-            for (int i = 0; i < p.length; i++) sb.Append(CellText(p, i));
-
-            text = sb.ToString();
+            else
+            {
+                p.ToggleDrum((DrumVoice)track, cursor);
+            }
         }
 
-        private string CellText(StepPattern p, int step)
+        internal static void NudgeNote(int delta)
         {
-            if (_isMelodic)
-            {
-                int n = p.GetNote(step);
-                if (n == StepPattern.Rest) return ".";
-                // 0-9 then A,B,C for 10-12, so every step stays one character wide.
-                return n < 10 ? n.ToString() : ((char)('A' + (n - 10))).ToString();
-            }
-            return p.GetDrum(_voice, step) ? "X" : ".";
+            StepSequencer s = seq;
+            if (s == null || track != MelodicTrack) return;
+            StepPattern p = s.pattern;
+            int cur = p.GetNote(cursor);
+            if (cur == StepPattern.Rest) cur = 0;
+            cur += delta;
+            if (cur < 0) cur = 0;
+            if (cur > 12) cur = 12;
+            p.SetNote(cursor, cur);
         }
 
-        /// <summary>Exactly LabelWidth characters, so the grid columns line up.</summary>
-        private static string ShortName(DrumVoice v)
+        internal static void ToggleMute()
+        {
+            StepSequencer s = seq;
+            if (s == null) return;
+            if (track == MelodicTrack) s.melodicMute = !s.melodicMute;
+            else s.ToggleMute((DrumVoice)track);
+        }
+
+        internal static string ShortName(DrumVoice v)
         {
             switch (v)
             {
                 case DrumVoice.Kick: return "KICK";
-                case DrumVoice.Snare: return "SNARE";
-                case DrumVoice.HatClosed: return "HAT CL";
-                case DrumVoice.HatOpen: return "HAT OP";
-                case DrumVoice.LowTom: return "TOM LO";
-                case DrumVoice.MedTom: return "TOM MD";
-                case DrumVoice.HighTom: return "TOM HI";
-                default: return "CRASH";
+                case DrumVoice.Snare: return "SNAR";
+                case DrumVoice.HatClosed: return "HATC";
+                case DrumVoice.HatOpen: return "HATO";
+                case DrumVoice.LowTom: return "TOML";
+                case DrumVoice.MedTom: return "TOMM";
+                case DrumVoice.HighTom: return "TOMH";
+                default: return "CRSH";
             }
+        }
+    }
+
+    /// <summary>
+    /// The menu item that hands the controls over to the grid.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors the MIDI-learn element: setting UIMenu.globalUILock freezes menu
+    /// navigation so W/A/S/D drive the cursor rather than moving the selection, and
+    /// _skipStep swallows the frame the activating press was consumed on.
+    /// </remarks>
+    public class UISequencerEditItem : UIMenuItem
+    {
+        private bool _skipStep;
+
+        internal UISequencerEditItem()
+            : base(new Func<string>(Caption), null, UIAlign.Center)
+        {
+        }
+
+        private static string Caption()
+        {
+            return SequencerGrid.editing ? "EDITING - PRESS E TO STOP" : "EDIT PATTERN";
+        }
+
+        public override void Activate(string trigger)
+        {
+            if (trigger != Triggers.Select) { base.Activate(trigger); return; }
+
+            SequencerGrid.editing = true;
+            _skipStep = true;
+            UIMenu.globalUILock = true;
+            try { SFX.Play("consoleSelect"); } catch { }
+        }
+
+        public override void Update()
+        {
+            if (SequencerGrid.editing)
+            {
+                if (_skipStep) { _skipStep = false; base.Update(); return; }
+
+                InputProfile p = InputProfile.DefaultPlayer1;
+                if (p != null)
+                {
+                    if (p.Pressed(Triggers.Left)) SequencerGrid.MoveCursor(-1);
+                    if (p.Pressed(Triggers.Right)) SequencerGrid.MoveCursor(1);
+                    if (p.Pressed(Triggers.Up)) SequencerGrid.MoveTrack(-1);
+                    if (p.Pressed(Triggers.Down)) SequencerGrid.MoveTrack(1);
+                    if (p.Pressed(Triggers.Jump) || p.Pressed(Triggers.Select))
+                    {
+                        SequencerGrid.ToggleCell();
+                        try { SFX.Play("consoleSelect"); } catch { }
+                    }
+                    if (p.Pressed(Triggers.Grab)) SequencerGrid.ToggleMute();
+                    if (p.Pressed(Triggers.Shoot)) SequencerGrid.NudgeNote(1);
+                    if (p.Pressed(Triggers.Ragdoll)) SequencerGrid.NudgeNote(-1);
+
+                    if (p.Pressed(Triggers.Quack) || p.Pressed(Triggers.Cancel))
+                    {
+                        SequencerGrid.editing = false;
+                        UIMenu.globalUILock = false;
+                        MidiConfig.Save();
+                        try { SFX.Play("consoleSelect"); } catch { }
+                    }
+                }
+            }
+            base.Update();
         }
     }
 }

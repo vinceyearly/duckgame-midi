@@ -63,6 +63,47 @@ namespace DuckGame.MidiController
 
         // --- entry points ---------------------------------------------------
 
+        /// <summary>
+        /// Reports the real measured geometry of the sequencer page.
+        /// </summary>
+        /// <remarks>
+        /// Added after several rounds of inferring widths from screenshots and getting it
+        /// wrong. UIComponent derives from Thing, so the menu and its rows carry actual
+        /// x/width values - read them rather than guessing.
+        /// </remarks>
+        internal static void DumpSequencerLayout()
+        {
+            try
+            {
+                Log.Info("  camera:  " + (int)Layer.HUD.camera.width + " x " + (int)Layer.HUD.camera.height);
+            }
+            catch { }
+
+            if (_seqMenu == null)
+            {
+                Log.Warn("  menu:    not built yet - open it once (F9) first");
+                return;
+            }
+
+            Log.Info("  menu:    x=" + _seqMenu.x.ToString("0.0") +
+                     " w=" + _seqMenu.width.ToString("0.0") +
+                     "  spans " + (_seqMenu.x - _seqMenu.width / 2f).ToString("0") +
+                     " .. " + (_seqMenu.x + _seqMenu.width / 2f).ToString("0"));
+
+            if (_seqRowSample != null)
+            {
+                string t = _seqRowSample.text;
+                Log.Info("  row:     " + t.Length + " chars, w=" + _seqRowSample.width.ToString("0.0"));
+                Log.Info("  text:    \"" + t + "\"");
+            }
+
+            if (_seqHintSample != null)
+                Log.Info("  hint:    w=" + _seqHintSample.width.ToString("0.0"));
+        }
+
+        private static UIText _seqRowSample;
+        private static UIText _seqHintSample;
+
         internal static void RequestOpen() { _openRequested = true; }
         internal static void RequestOpenWizard() { _wizardRequested = true; }
 
@@ -377,18 +418,35 @@ namespace DuckGame.MidiController
             // The HUD camera is only 320x180 units. A UIMenu grows to fit its widest
             // child, so both the title and every caption have to stay short or the whole
             // dialog is pushed off the right of the screen.
-            UIMenu m = new UIMenu("@QUACK@SEQUENCER", cx, cy, 220f,
-                conString: "@CANCEL@BACK @SELECT@TOGGLE");
+            // 300 of the camera's 320 units. The grid needs the room: its text is drawn
+            // ~1.4x the measured size, so 20 characters occupy ~224 units plus the ~15
+            // unit inset. See the LabelWidth note in UISequencerRow.
+            UIMenu m = new UIMenu("@QUACK@SEQUENCER", cx, cy, 300f,
+                conString: "@CANCEL@BACK @SELECT@EDIT");
 
             m.Add(new UIText(new Func<string>(SeqStatusLine), Color.White, UIAlign.Center), true);
-            m.Add(new UIText(new Func<string>(UISequencerRow.IndicatorLine),
-                Colors.DGGreen, UIAlign.Center), true);
 
-            for (int v = 0; v < (int)DrumVoice.Count; v++)
-                m.Add(new UISequencerRow((DrumVoice)v), true);
-            m.Add(new UISequencerRow(), true);   // melodic line
+            UIText indicator = new UIText(new Func<string>(SequencerGrid.IndicatorLine),
+                Colors.DGGreen, UIAlign.Center);
+            UseGridFont(indicator);
+            m.Add(indicator, true);
 
-            m.Add(new UIText(new Func<string>(SeqHintLine), Colors.DGYellow, UIAlign.Center), true);
+            // Plain centred UIText per track - see the note in SequencerGrid for why these
+            // cannot be menu items. Input comes from the edit item below instead.
+            for (int t = 0; t < SequencerGrid.TrackCount; t++)
+            {
+                int index = t;
+                UIText row = new UIText(new Func<string>(delegate { return SequencerGrid.RowText(index); }),
+                    Color.White, UIAlign.Center);
+                UseGridFont(row);
+                if (_seqRowSample == null) _seqRowSample = row;
+                m.Add(row, true);
+            }
+
+            m.Add(new UISequencerEditItem(), true);
+
+            _seqHintSample = new UIText(new Func<string>(SeqHintLine), Colors.DGYellow, UIAlign.Center);
+            m.Add(_seqHintSample, true);
 
             m.Add(new UIMenuItem(new Func<string>(PlayLabel),
                 new UIMenuActionCallFunction(new UIMenuActionCallFunction.Function(SeqTogglePlay))), true);
@@ -410,6 +468,16 @@ namespace DuckGame.MidiController
 
             m.Close();
             _seqMenu = m;
+        }
+
+        /// <summary>
+        /// The grid rows are the widest thing in the mod, and the visible viewport turns
+        /// out to be narrower than the camera reports, so they get the game's small font.
+        /// </summary>
+        private static void UseGridFont(UIText t)
+        {
+            try { t.SetFont(new BitmapFont("smallBiosFontUI", 7, 5)); }
+            catch { }
         }
 
         private static string SeqStatusLine()

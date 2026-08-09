@@ -360,6 +360,10 @@ namespace DuckGame.MidiController
                     MidiConfig.Save();
                     Log.Good("patterns saved.");
                     break;
+                case "debug":
+                    Log.Info("--- sequencer layout ---");
+                    MidiSettingsMenu.DumpSequencerLayout();
+                    break;
                 case "status":
                     Log.Info("--- sequencer ---");
                     Log.Info("  transport: " + (s.recording ? "RECORDING" : (s.playing ? "playing" : "stopped")));
